@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from call_function import available_functions
+from call_function import call_function
 
 def main():
     load_dotenv()
@@ -28,6 +29,9 @@ def main():
     When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
 
     - List files and directories
+    - Read file contents
+    - Execute Python files with optional arguments
+    - Write or overwrite files
 
     All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
     """
@@ -48,9 +52,19 @@ def main():
             print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
 
 
-    if response.function_calls is not None:   
+    if response.function_calls is not None:
+        function_results = []
         for i in response.function_calls:
-            print(f"Calling function: {i.name}({i.args})")
+            function_call_result = call_function(i, verbose=args.verbose)
+            if not function_call_result.parts:
+                raise Exception("Empty .parts list")
+            if not function_call_result.parts[0].function_response:
+                raise Exception(".parts[0].function_response doesnt exist")
+            if not function_call_result.parts[0].function_response.response:
+                raise Exception("function response has no .response field")
+            if args.verbose:
+                print(f"-> {function_call_result.parts[0].function_response.response}")
+            function_results.append(function_call_result.parts[0])
     else:
         print(response.text)
 
