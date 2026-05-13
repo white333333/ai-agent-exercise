@@ -35,38 +35,45 @@ def main():
 
     All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
     """
-
-    response = client.models.generate_content(
-        model='gemini-2.5-flash', contents=messages,
-        config=types.GenerateContentConfig(
-            tools=[available_functions], system_instruction=system_prompt
+    for _ in range(20):
+        response = client.models.generate_content(
+            model='gemini-2.5-flash', contents=messages,
+            config=types.GenerateContentConfig(
+                tools=[available_functions], system_instruction=system_prompt
+            )
         )
-    )
-    #counting tokens:
-    if args.verbose:
-        if response.usage_metadata is None:
-            raise RuntimeError("failed API request")
+        #add model requests to the message list
+        if response.candidates:
+            for candidate in response.candidates:
+                messages.append(candidate.content)
+        #counting tokens:
+        if args.verbose:
+            if response.usage_metadata is None:
+                raise RuntimeError("failed API request")
+            else:
+                print(f"User prompt: {args.user_prompt}")
+                print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+                print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+
+
+        if response.function_calls is not None:
+            function_results = []
+            for i in response.function_calls:
+                function_call_result = call_function(i, verbose=args.verbose)
+                if not function_call_result.parts:
+                    raise Exception("Empty .parts list")
+                if not function_call_result.parts[0].function_response:
+                    raise Exception(".parts[0].function_response doesnt exist")
+                if not function_call_result.parts[0].function_response.response:
+                    raise Exception("function response has no .response field")
+                if args.verbose:
+                    print(f"-> {function_call_result.parts[0].function_response.response}")
+                function_results.append(function_call_result.parts[0])
+            messages.append(types.Content(role="user", parts=function_results))
         else:
-            print(f"User prompt: {args.user_prompt}")
-            print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-            print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
-
-
-    if response.function_calls is not None:
-        function_results = []
-        for i in response.function_calls:
-            function_call_result = call_function(i, verbose=args.verbose)
-            if not function_call_result.parts:
-                raise Exception("Empty .parts list")
-            if not function_call_result.parts[0].function_response:
-                raise Exception(".parts[0].function_response doesnt exist")
-            if not function_call_result.parts[0].function_response.response:
-                raise Exception("function response has no .response field")
-            if args.verbose:
-                print(f"-> {function_call_result.parts[0].function_response.response}")
-            function_results.append(function_call_result.parts[0])
-    else:
-        print(response.text)
+            print(response.text)
+            return
+    print("Maximum iterations reached")
 
 if __name__ == "__main__":
     main()
